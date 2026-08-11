@@ -6,10 +6,11 @@ WORKDIR /app
 COPY requirements.txt .
 # Install the dependencies listed in the reqs.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# Since I have the pytorch GPU one, I am installing the cpu one seperately
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 # copy the local app folder to the image /app folder ->/app/app/main.py
 COPY app/ app/
-# copy models folder too -> /app/models/..
-COPY models/ models/
+
 # Inside the container, this app expects to listen on the port 8000
 EXPOSE 8000
 

@@ -1,11 +1,21 @@
+# virtual environments
 venv/
 .venv/
 __pycache__/
 *.pyc
+# jupyter
 .ipynb_checkpoints/
+# git
 .git/
 .gitignore
+
+# environment variables
+.env
+#test
 tests/
+# jupyter
 notebooks/
 reports/
 data/raw/
+# local model artifacts
+models/
