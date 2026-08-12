@@ -1,751 +1,476 @@
-# Fin Intelligence System — V1
+# Financial Intelligence System
 
-![Python](https://img.shields.io/badge/Python-3.13-blue)
-![FastAPI](https://img.shields.io/badge/API-FastAPI-green)
-![scikit-learn](https://img.shields.io/badge/ML-scikit--learn-orange)
-![Docker](https://img.shields.io/badge/Container-Docker-blue)
-![Deployment](https://img.shields.io/badge/Deployment-Render-purple)
+A production-style financial news sentiment analysis API built with
+**FastAPI**, **TF-IDF**, and a **fine-tuned FinBERT model**.
 
-A financial news sentiment classification API that converts raw financial headlines into structured sentiment labels: **positive**, **neutral**, or **negative**.
+The project takes financial news headlines as input and classifies their
+sentiment as:
 
-This is the first version of a larger financial NLP system. V1 focuses on building a reliable classical machine learning baseline, serving it through a FastAPI inference API, containerizing it with Docker, and deploying it publicly on Render.
+-   `positive`
+-   `negative`
+-   `neutral`
 
----
+The API exposes both individual and batch prediction endpoints and is
+deployed publicly using **Google Cloud Run**.
 
-## Live API
+------------------------------------------------------------------------
 
-**Swagger API Docs:**  
-[https://fintel-system-v1.onrender.com/docs](https://fintel-system-v1.onrender.com/docs)
+## Why this project?
 
-**Health Check:**  
-[https://fintel-system-v1.onrender.com/health](https://fintel-system-v1.onrender.com/health)
+Financial news moves quickly, and manually reviewing large numbers of
+headlines is not practical.
 
-> Note: This is an API-first ML deployment project. A user-facing frontend is not included in V1.
+This project explores a simple but useful question:
 
----
+> Can we automatically triage financial news headlines by sentiment,
+> while keeping a lightweight traditional ML baseline alongside a
+> domain-specific transformer model?
 
-## Table of Contents
+The project therefore uses two models:
 
-- [Project Status](#project-status)
-- [The Problem](#the-problem)
-- [What It Does](#what-it-does)
-- [System Overview](#system-overview)
-- [Dataset](#dataset)
-- [Data Preparation](#data-preparation)
-- [Split Strategy](#split-strategy)
-- [Majority Baseline](#majority-baseline)
-- [Modeling Approach](#modeling-approach)
-- [Final Test Results](#final-test-results)
-- [Error Analysis](#error-analysis)
-- [FastAPI Inference API](#fastapi-inference-api)
-- [API Usage](#api-usage)
-- [Important API Note](#important-api-note)
-- [Run Locally](#run-locally)
-- [Run With Docker](#run-with-docker)
-- [Tests](#tests)
-- [Project Structure](#project-structure)
-- [Built With](#built-with)
-- [Limitations](#limitations)
-- [What’s Next](#whats-next)
-- [Project Positioning](#project-positioning)
+1.  **TF-IDF + Linear SVM** as the traditional NLP baseline.
+2.  **Fine-tuned FinBERT** as the domain-specific transformer model.
 
----
+This makes the project useful not only as an API, but also as a
+comparison between classical NLP and modern transformer-based NLP.
 
-## Project Status
+------------------------------------------------------------------------
 
-**V1 Complete**
+## Architecture
 
-Completed:
-
-- Data cleaning and preprocessing
-- Duplicate and conflicting-label handling
-- Stratified development/test split
-- TF-IDF + Logistic Regression baseline
-- TF-IDF + Linear SVM baseline
-- Final test-set evaluation
-- Error analysis
-- Saved sklearn pipeline with `joblib`
-- FastAPI inference API
-- API tests with `pytest`
-- Dockerized service
-- Public deployment on Render
-
-Planned:
-
-- V2: FinBERT comparison
-- V3: Financial document intelligence
-
----
-
-## The Problem
-
-Financial news moves fast. Analysts, investors, and financial platforms often need to process large volumes of headlines and quickly understand whether the news is positive, negative, or neutral.
-
-This project automates that first triage step.
-
-Given a financial headline, the API returns one of three sentiment labels:
-
-```text
-positive
-neutral
-negative
+``` text
+                    ┌─────────────────────┐
+                    │       Client        │
+                    │ Browser / Postman   │
+                    │ Python / Application│
+                    └──────────┬──────────┘
+                               │ HTTPS
+                               ▼
+                    ┌─────────────────────┐
+                    │     Google Cloud    │
+                    │       Run           │
+                    │                     │
+                    │      FastAPI        │
+                    │         │           │
+                    │    ┌────┴────┐      │
+                    │    ▼         ▼      │
+                    │ TF-IDF    FinBERT   │
+                    │  Model      Model   │
+                    └─────────┬───────────┘
+                              │
+                              ▼
+                           Response
 ```
 
-Example:
+### Deployment pipeline
 
-```text
-Input:  Operating profit fell compared with the previous year.
-Output: negative
+``` text
+GitHub
+   │
+   │ push to main
+   ▼
+Cloud Build
+   │
+   │ builds Docker image
+   ▼
+Artifact Registry
+   │
+   │ container image
+   ▼
+Cloud Run
+   │
+   ▼
+Public HTTPS API
 ```
 
----
+Cloud Build is configured to automatically build and deploy the
+application when changes are pushed to the repository.
 
-## What It Does
+------------------------------------------------------------------------
 
-The deployed API exposes a trained sentiment classifier through FastAPI.
+## Models
 
-Example request:
+### 1. TF-IDF baseline --- v1
 
-```json
-{
-  "text": "Operating profit fell compared with the previous year."
-}
-```
+The baseline represents each headline using **TF-IDF** features and
+performs classification using a linear Support Vector Machine.
 
-Example response:
+Why keep a traditional model?
 
-```json
-{
-  "sentiment": "negative",
-  "model_name": "TF-IDF + Linear SVM",
-  "model_version": "v1-baseline"
-}
-```
+-   Fast inference
+-   Small and relatively lightweight
+-   Easy to understand and debug
+-   Strong baseline for sparse text classification
+-   Useful for comparing classical NLP against transformers
 
----
+**Model name:** `TF-IDF`\
+**Version:** `v1`
 
-## System Overview
+------------------------------------------------------------------------
 
-```text
-Financial Headline
-        ↓
-FastAPI Endpoint
-        ↓
-Pydantic Input Validation
-        ↓
-Saved sklearn Pipeline
-TF-IDF Vectorizer + Linear SVM
-        ↓
-Sentiment Prediction
-positive / neutral / negative
-```
+### 2. Fine-tuned FinBERT --- v2
 
-Deployment flow:
+FinBERT is a BERT-based model designed for financial language.
 
-```text
-GitHub Repository
-        ↓
-Render Web Service
-        ↓
-Docker Build
-        ↓
-FastAPI App Starts
-        ↓
-Saved Model Loads
-        ↓
-Public API Available
-```
+The model was fine-tuned for the project's three-class sentiment
+classification task.
 
----
+It is expected to perform better when financial context matters because
+words and phrases can have different meanings in financial news than in
+general language.
+
+**Model name:** `Fine-tuned FinBERT`\
+**Version:** `v2`
+
+The fine-tuned FinBERT model achieved approximately **88% macro-F1**
+during evaluation.
+
+------------------------------------------------------------------------
 
 ## Dataset
 
-Dataset used:
+The project uses the **Financial PhraseBank** dataset for financial
+sentiment classification.
 
-```text
-FinancialPhraseBank
+The dataset contains financial statements and news-style phrases
+labelled as:
+
+-   Positive
+-   Negative
+-   Neutral
+
+The data was used to train and evaluate the project's sentiment models.
+
+------------------------------------------------------------------------
+
+## API
+
+### Base URL
+
+The deployed API is available at:
+
+`https://financial-intelligence-system-871346793913.asia-south1.run.app`
+
+### API documentation
+
+FastAPI automatically provides interactive API documentation.
+
+-   `/docs` --- Swagger UI
+-   `/redoc` --- ReDoc documentation
+
+### Model information
+
+``` http
+GET /model-info
 ```
 
-The original dataset contains **4,846 financial sentences** labeled as positive, neutral, or negative.
+Returns information about the models currently exposed by the API.
 
-Final cleaned class distribution:
+------------------------------------------------------------------------
 
-| Sentiment | Proportion |
-|---|---:|
-| neutral | 59.16% |
-| positive | 28.29% |
-| negative | 12.55% |
+### Single prediction
 
-The dataset is imbalanced, with `neutral` as the majority class. Because of this, macro F1-score is used along with accuracy.
-
----
-
-## Data Preparation
-
-The data preparation process focused on creating a clean and traceable dataset before modeling.
-
-Main cleaning steps:
-
-- Standardized column names to `text` and `sentiment`
-- Checked missing values
-- Removed exact duplicate rows
-- Manually reviewed same-text different-label conflicts
-- Removed greetings, boilerplate, broken fragments, and contextless rows
-- Preserved short but meaningful financial statements
-- Maintained a removal log for auditability
-
-Important cleaning principle:
-
-```text
-Short text was not removed just because it was short.
-Rows were removed only when they lacked standalone financial or news meaning.
+``` http
+POST /predict
 ```
 
-Examples of removed rows:
+Classifies a single financial headline.
 
-```text
-All are welcome .
-Welcome !
-All rights reserved .
-Why not subscribe to the magazine ?
-```
+Example request:
 
-Examples of short but meaningful rows that were kept:
-
-```text
-Terms were not disclosed .
-The order was worth EUR 8mn .
-Cargo volume grew by 7 % .
-EPS dropped to EUR0.2 from EUR0.3 .
-```
-
----
-
-## Split Strategy
-
-A fixed stratified split was created:
-
-| Split | Purpose |
-|---|---|
-| Development set | Cross-validation and model selection |
-| Test set | Final untouched evaluation |
-
-Split ratio:
-
-```text
-85% development data
-15% final test data
-```
-
-The split was stratified to preserve the original class distribution across both sets.
-
-The original row index was preserved as `original_index` for traceability and error analysis.
-
----
-
-## Majority Baseline
-
-The majority class is:
-
-```text
-neutral
-```
-
-Majority-class baseline accuracy:
-
-| Baseline | Accuracy |
-|---|---:|
-| Always predict neutral | 0.5916 |
-
-A useful model should meaningfully outperform this baseline.
-
----
-
-## Modeling Approach
-
-Two classical NLP baselines were trained using TF-IDF features:
-
-1. TF-IDF + Logistic Regression
-2. TF-IDF + Linear SVM
-
-Both models were evaluated using stratified 5-fold cross-validation on the development set.
-
-| Model | CV Accuracy | CV Macro F1 | Notes |
-|---|---:|---:|---|
-| TF-IDF + Logistic Regression | 0.7568 | 0.7148 | Strong baseline |
-| TF-IDF + Linear SVM | 0.7729 | 0.7294 | Selected model |
-
-The Linear SVM model was selected because it performed best during cross-validation and is well-suited for high-dimensional sparse text features produced by TF-IDF.
-
-The final model was saved as a full sklearn Pipeline:
-
-```text
-TfidfVectorizer + LinearSVC
-```
-
-Saved model artifact:
-
-```text
-models/best_tfidf_linear_svm.joblib
-```
-
----
-
-## Final Test Results
-
-The selected model was trained on the full development set and evaluated once on the untouched test set.
-
-| Metric | Score |
-|---|---:|
-| Test Accuracy | 0.7441 |
-| Test Macro F1 | 0.7077 |
-| Majority-Class Accuracy Baseline | 0.5916 |
-
-The model improves over the majority-class accuracy baseline by:
-
-```text
-+15.25 percentage points
-```
-
-Classification report:
-
-| Class | Precision | Recall | F1-score | Support |
-|---|---:|---:|---:|---:|
-| negative | 0.66 | 0.71 | 0.69 | 91 |
-| neutral | 0.79 | 0.82 | 0.81 | 428 |
-| positive | 0.66 | 0.59 | 0.63 | 204 |
-
-Confusion matrix:
-
-```text
-[[ 65  19   7]
- [ 22 352  54]
- [ 11  72 121]]
-```
-
-Class order:
-
-```text
-negative, neutral, positive
-```
-
-Main weakness:
-
-```text
-positive ↔ neutral confusion
-```
-
----
-
-## Error Analysis
-
-Wrong predictions were manually reviewed to understand model behavior.
-
-Most common error types:
-
-| True Label | Predicted Label | Count |
-|---|---|---:|
-| positive | neutral | 72 |
-| neutral | positive | 54 |
-| neutral | negative | 22 |
-| negative | neutral | 19 |
-| positive | negative | 11 |
-| negative | positive | 7 |
-
-Main failure patterns:
-
-1. **Positive-neutral boundary**
-   - Positive business developments written in a factual tone were often predicted as neutral.
-
-2. **Keyword overreaction**
-   - Words like `increase`, `growth`, `profit`, or `agreement` sometimes pushed the model toward positive even when the full sentence was neutral or negative.
-
-3. **Missed comparison direction**
-   - The model sometimes failed to understand financial improvement or decline across reporting periods.
-
-4. **Mixed financial signals**
-   - Headlines containing both positive and negative elements were difficult for the classical model.
-
-Example:
-
-```text
-A sentence mentioning "loss" may still be positive if the company moved from loss to profit.
-A sentence mentioning "profit" may still be negative if profit declined.
-```
-
-These errors show why a contextual financial language model such as FinBERT is a logical V2 upgrade.
-
----
-
-## FastAPI Inference API
-
-The trained model is served through a FastAPI application.
-
-Available endpoints:
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Service health check |
-| GET | `/model-info` | Model version and metadata |
-| POST | `/predict` | Classify a single headline |
-| POST | `/predict_batch` | Classify multiple headlines |
-
-The API validates:
-
-- blank input
-- whitespace-only input
-- batch input containing empty strings
-
-Interactive API documentation:
-
-```text
-https://fintel-system-v1.onrender.com/docs
-```
-
----
-
-## API Usage
-
-### Health Check
-
-```bash
-curl https://fintel-system-v1.onrender.com/health
-```
-
-Example response:
-
-```json
+``` json
 {
-  "status": "ok",
-  "model_loaded": true
+  "text": "The company reported stronger-than-expected quarterly earnings."
 }
 ```
 
----
-
-### Model Info
-
-```bash
-curl https://fintel-system-v1.onrender.com/model-info
-```
-
 Example response:
 
-```json
+``` json
 {
-  "model_name": "TF-IDF + Linear SVM",
-  "model_version": "v1-baseline",
-  "model_path": ".../models/best_tfidf_linear_svm.joblib",
-  "classes": [
-    "negative",
-    "neutral",
-    "positive"
+  "prediction": "positive"
+}
+```
+
+------------------------------------------------------------------------
+
+### Batch prediction
+
+``` http
+POST /predict-batch
+```
+
+Classifies multiple headlines in one request.
+
+Example request:
+
+``` json
+{
+  "texts": [
+    "The company reported record quarterly revenue.",
+    "The bank announced a significant decline in profits.",
+    "The company maintained its outlook for the year."
   ]
 }
 ```
 
----
-
-### Single Prediction
-
-Endpoint:
-
-```text
-POST /predict
-```
-
-Example request:
-
-```bash
-curl -X POST "https://fintel-system-v1.onrender.com/predict" \
-  -H "Content-Type: application/json" \
-  -d "{\"text\":\"Operating profit fell compared with the previous year.\"}"
-```
-
 Example response:
 
-```json
-{
-  "sentiment": "negative",
-  "model_name": "TF-IDF + Linear SVM",
-  "model_version": "v1-baseline"
-}
-```
-
----
-
-### Batch Prediction
-
-Endpoint:
-
-```text
-POST /predict_batch
-```
-
-Example request:
-
-```bash
-curl -X POST "https://fintel-system-v1.onrender.com/predict_batch" \
-  -H "Content-Type: application/json" \
-  -d "{\"texts\":[\"Operating profit fell compared with the previous year.\",\"The company signed a new contract worth EUR 10 million.\",\"Financial terms were not disclosed.\"]}"
-```
-
-Example response:
-
-```json
+``` json
 {
   "predictions": [
-    "negative",
     "positive",
+    "negative",
     "neutral"
-  ],
-  "model_name": "TF-IDF + Linear SVM",
-  "model_version": "v1-baseline"
+  ]
 }
 ```
 
----
+The API also exposes model/version information for batch predictions.
 
-## Important API Note
+------------------------------------------------------------------------
 
-Opening this URL directly in a browser:
+## Local Development
 
-```text
-https://fintel-system-v1.onrender.com/predict
+### 1. Clone the repository
+
+``` bash
+git clone https://github.com/neon-commits01/financial-intelligence-system.git
+cd financial-intelligence-system
 ```
 
-may return:
+### 2. Create a virtual environment
 
-```json
-{
-  "detail": "Method Not Allowed"
-}
+``` bash
+python -m venv .venv
 ```
 
-This is expected because `/predict` is a POST endpoint, not a GET endpoint.
+Activate it on Windows:
 
-Use Swagger UI for browser-based testing:
-
-```text
-https://fintel-system-v1.onrender.com/docs
+``` bash
+.venv\Scripts\activate
 ```
 
----
+### 3. Install dependencies
 
-## Run Locally
-
-Clone the repository:
-
-```bash
-git clone https://github.com/neon-commits01/fintel-system-v1.git
-cd fintel-system-v1
-```
-
-Create a virtual environment:
-
-```bash
-python -m venv venv
-```
-
-Activate it.
-
-On Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-On macOS/Linux:
-
-```bash
-source venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
+``` bash
 pip install -r requirements.txt
 ```
 
-Run the FastAPI app:
+### 4. Configure environment variables
 
-```bash
+Create a local `.env` file containing the environment variables required
+by the application.
+
+Do **not** commit `.env` to GitHub.
+
+The application reads configuration using environment variables rather
+than hard-coding deployment-specific values.
+
+### 5. Run the API
+
+``` bash
 uvicorn app.main:app --reload
 ```
 
-Open:
+The API will be available locally through the address printed by
+Uvicorn.
 
-```text
-http://127.0.0.1:8000/docs
+Interactive documentation will be available at:
+
+``` text
+/docs
 ```
 
----
+------------------------------------------------------------------------
 
-## Run With Docker
+## Docker
 
-Build the Docker image:
+The application is containerized using Docker.
 
-```bash
-docker build -t fintel-v1 .
+### Build the image
+
+``` bash
+docker build -t financial-intelligence-system .
 ```
 
-Run the container:
+### Run the container
 
-```bash
-docker run -p 8000:8000 fintel-v1
+``` bash
+docker run --env-file .env -p 8000:8000 financial-intelligence-system
 ```
 
-Open:
+The Docker image contains the application and its Python dependencies,
+allowing the same application environment to be reproduced across
+machines.
 
-```text
-http://127.0.0.1:8000/docs
+------------------------------------------------------------------------
+
+## Google Cloud Deployment
+
+The production API is deployed using **Google Cloud Run**.
+
+The deployment flow is:
+
+``` text
+GitHub
+   ↓
+Cloud Build
+   ↓
+Docker image
+   ↓
+Artifact Registry
+   ↓
+Cloud Run
 ```
 
-The Dockerfile uses dynamic port binding for deployment:
+### Why Cloud Run?
 
-```dockerfile
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+Cloud Run was chosen because it provides:
+
+-   Managed container execution
+-   HTTPS endpoint
+-   Automatic scaling
+-   Scale-to-zero behavior
+-   No need to manage a virtual machine
+-   Simple deployment from a Git repository
+
+The service uses **request-based billing** and can scale down when there
+is no traffic.
+
+------------------------------------------------------------------------
+
+## Environment Variables
+
+Environment-specific configuration is kept outside the source code.
+
+For example, the application reads the FinBERT model configuration using
+an environment variable:
+
+``` text
+FINBERT_MODEL_ID
 ```
 
-This allows local execution on port `8000` and cloud execution using Render's provided `PORT` variable.
+The actual values should be supplied through the deployment environment
+and should not be committed to the repository.
 
----
+For local development, these values can be placed in `.env`.
 
-## Tests
+For cloud deployment, configure them through the Cloud Run service
+configuration.
 
-Run tests:
-
-```bash
-python -m pytest
-```
-
-Current test status:
-
-```text
-6 passed
-```
-
-Tests cover:
-
-- health check
-- model metadata
-- single prediction
-- batch prediction
-- empty input validation
-- batch empty input validation
-
----
+------------------------------------------------------------------------
 
 ## Project Structure
 
-```text
-fintel-system-v1/
+``` text
+financial-intelligence-system/
+│
 ├── app/
-│   ├── __init__.py
-│   └── main.py
-├── data/
-│   ├── raw/
-│   └── processed/
+│   ├── main.py
+│   ├── inference_finbert.py
+│   └── inference_tfidf.py
+│
 ├── models/
-│   └── best_tfidf_linear_svm.joblib
-├── notebooks/
-│   ├── 01_data_cleaning.ipynb
-│   ├── 02_data_splitting.ipynb
-│   └── 03_baseline_models.ipynb
-├── reports/
-│   ├── removed_rows_log.csv
-│   ├── baseline_model_comparison.csv
-│   ├── final_test_metrics.csv
-│   ├── test_predictions.csv
-│   └── error_analysis_sample.csv
-├── tests/
-│   └── test_api.py
+│   └── ...
+│
+├── requirements.txt
 ├── Dockerfile
 ├── .dockerignore
-├── requirements.txt
-├── pytest.ini
+├── .gitignore
 └── README.md
 ```
 
----
+The exact contents may evolve as the project develops.
 
-## Built With
+------------------------------------------------------------------------
 
-| Area | Tools |
-|---|---|
-| Language | Python |
-| Data Processing | pandas, NumPy |
-| ML/NLP | scikit-learn, TF-IDF, Linear SVM |
-| API | FastAPI |
-| Validation | Pydantic |
-| Testing | pytest, FastAPI TestClient |
-| Serialization | joblib |
-| Containerization | Docker |
-| Deployment | Render |
+## Testing
 
----
+The API can be tested using:
 
-## Limitations
+-   FastAPI Swagger UI
+-   Postman
+-   `curl`
+-   Python HTTP clients
+-   Any application capable of making HTTPS requests
 
-Current limitations:
+Both individual and batch prediction endpoints can be used to compare
+model behaviour.
 
-- No user-facing frontend
-- No probability or confidence score
-- No FinBERT comparison yet
-- No live news ingestion
-- No entity extraction
-- No explanation generation
-- No RAG or document grounding
-- Classical model has limited understanding of deep financial context
+------------------------------------------------------------------------
 
----
+## What I learned from the project
 
-## What’s Next
+This project was built to understand the complete path from an ML model
+to a usable cloud API.
 
-### V2 — FinBERT Upgrade
+Key concepts covered include:
 
-Compare the current classical baseline against a transformer model pretrained on financial text.
+-   Text preprocessing
+-   TF-IDF vectorization
+-   Linear SVM classification
+-   Transformer-based NLP
+-   FinBERT
+-   Model inference
+-   FastAPI
+-   REST APIs
+-   Environment variables
+-   Docker images and containers
+-   Dockerfile-based builds
+-   Cloud Build
+-   Artifact Registry
+-   Google Cloud Run
+-   Continuous deployment from GitHub
+-   Cloud scaling and request-based billing
 
-Goals:
+The main goal was not just to train a model, but to understand how an ML
+model becomes an actual service that another application can call.
 
-- Improve contextual understanding
-- Reduce positive-neutral confusion
-- Better handle financial comparison direction
-- Compare performance and latency against the classical baseline
+------------------------------------------------------------------------
 
-### V3 — Financial Document Intelligence
+## Future Improvements
 
-Extend beyond headlines into longer financial documents such as:
+Potential next steps include:
 
-- RBI circulars
-- NSE/BSE announcements
-- earnings call transcripts
-- annual report sections
-- regulatory filings
+-   Add more detailed API validation
+-   Add automated tests
+-   Add monitoring and structured logging
+-   Add model performance monitoring
+-   Improve error handling
+-   Add more financial NLP tasks
+-   Experiment with additional transformer models
+-   Add authentication if the API becomes a private service
+-   Improve CI/CD checks before deployment
 
-Potential features:
+------------------------------------------------------------------------
 
-- document summarization
-- entity extraction
-- event classification
-- citation-grounded financial Q&A
-- RAG-based document intelligence
+## Tech Stack
 
----
+  Component             Technology
+  --------------------- --------------------------
+  Language              Python
+  API                   FastAPI
+  Traditional NLP       TF-IDF
+  Baseline classifier   Linear SVM
+  Transformer           FinBERT
+  Containerization      Docker
+  Source control        Git / GitHub
+  Build / CI/CD         Google Cloud Build
+  Container registry    Google Artifact Registry
+  Deployment            Google Cloud Run
 
-## Project Positioning
+------------------------------------------------------------------------
 
-This project is the first version of a larger financial NLP system.
+## Status
 
-V1 establishes:
+**Deployed and working.**
 
-- a cleaned financial sentiment dataset
-- a strong classical NLP baseline
-- reproducible model evaluation
-- error analysis
-- a saved model artifact
-- a FastAPI inference API
-- Docker-based deployment
-- a public cloud-hosted API
+The API is publicly accessible through Google Cloud Run and currently
+supports both single-headline and batch sentiment prediction.
 
-Future versions will focus on contextual financial language models and document-level intelligence.
+------------------------------------------------------------------------
+
+## License
+
+This project is intended primarily as a learning and portfolio project.
