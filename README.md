@@ -1,5 +1,8 @@
 # Financial Intelligence System
 
+**Live API:**\
+<https://financial-intelligence-system-871346793913.asia-south1.run.app/docs>
+
 A production-style financial news sentiment analysis API built with
 **FastAPI**, **TF-IDF**, and a **fine-tuned FinBERT model**.
 
@@ -126,6 +129,18 @@ The fine-tuned FinBERT model achieved approximately **88% macro-F1**
 during evaluation.
 
 ------------------------------------------------------------------------
+
+### Evaluation Results
+
+  Model                    Accuracy   Macro F1
+  ---------------------- ---------- ----------
+  TF-IDF + LinearSVC         74.41%     70.77%
+  FinBERT (zero-shot)        88.10%     87.23%
+  FinBERT (fine-tuned)       88.94%     88.31%
+
+These results show the progression from the classical TF-IDF baseline to
+a domain-specific transformer model, with fine-tuning providing the
+strongest overall performance.
 
 ## Dataset
 
