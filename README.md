@@ -213,8 +213,8 @@ TFIDF_MODEL_ID=neonbit01/tfidf-financial-sentiment-v1
 ### Clone the repository
 
 ```bash
-git clone https://github.com/neon-commits01/fintel-system-v1.git
-cd fintel-system-v1
+git clone https://github.com/neon-commits01/financial-intelligence-system.git
+cd financial-intelligence-system
 ```
 
 ### Create a virtual environment
