@@ -1,4 +1,4 @@
-# Fin Intelligence System v1
+# Financial Intelligence System
 
 A financial news sentiment classification API built to compare a traditional NLP baseline with a domain-specific Transformer model.
 
@@ -140,6 +140,8 @@ Google Cloud Run
 https://financial-intelligence-system-871346793913.asia-south1.run.app/docs
 
 Open the link, choose an endpoint, click **Try it out**, enter a headline, and click **Execute**.
+You need not specify the model name, **finbert** is the default model. If you want to change it then
+you need to add "model":"tfidf" below
 
 ### Single prediction
 
@@ -156,6 +158,14 @@ Example:
 ```
 
 The API returns the predicted sentiment and model information.
+
+```json
+{
+  "text": "The company reported stronger-than-expected quarterly earnings.",
+  "model": "tfidf"
+}
+```
+This way you can choose the model other than finbert(default).
 
 ### Batch prediction
 
@@ -176,6 +186,18 @@ Example:
 ```
 
 This allows multiple headlines to be classified in one request.
+
+```json
+{
+   "texts": [
+    "The company reported record quarterly revenue.",
+    "The bank announced a significant decline in profits.",
+    "The company maintained its outlook for the year."
+  ],
+  "model": "tfidf"
+}
+```
+This allows multiple headlines and an option to choose the other model.
 
 ### Model information
 
@@ -335,6 +357,7 @@ The main takeaway was learning how to move from an ML experiment to an actual se
 
 ## Status
 
-**Deployed and working.**
+"V3 (in progress): RAG pipeline for 
+ financial document Q&A with citations"
 
 The current production API runs on Google Cloud Run and exposes both the V1 TF-IDF baseline and V2 fine-tuned FinBERT model.
